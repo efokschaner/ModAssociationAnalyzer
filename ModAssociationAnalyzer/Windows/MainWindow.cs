@@ -36,6 +36,10 @@ public sealed class MainWindow : Window, IDisposable
     private string?      _selectedDir;
     private float        _leftWidth    = 280f;
 
+    // We own folder open/closed state (keyed by FolderNode.FullKey) rather than relying on
+    // ImGui's internal tree storage, so Expand/Collapse All can act on the whole tree.
+    private readonly HashSet<string> _openFolders = new(StringComparer.Ordinal);
+
     private static string DesignFilterLabel(DesignFilter filter) => filter switch
     {
         DesignFilter.WithDesigns    => "Only mods used by a design",
@@ -153,7 +157,32 @@ public sealed class MainWindow : Window, IDisposable
     }
 
     private void DrawModList()
-        => DrawFolder(_index.Root);
+    {
+        DrawFolder(_index.Root);
+        DrawTreeContextMenu();
+    }
+
+    private void DrawTreeContextMenu()
+    {
+        if (!ImGui.BeginPopupContextWindow("##treeContext"))
+            return;
+
+        if (ImGui.MenuItem("Expand All Folders"))
+            ExpandAllFolders(_index.Root);
+        if (ImGui.MenuItem("Collapse All Folders"))
+            _openFolders.Clear();
+
+        ImGui.EndPopup();
+    }
+
+    private void ExpandAllFolders(FolderNode folder)
+    {
+        foreach (var sub in folder.Folders.Values)
+        {
+            _openFolders.Add(sub.FullKey);
+            ExpandAllFolders(sub);
+        }
+    }
 
     private void DrawFolder(FolderNode folder)
     {
@@ -162,13 +191,23 @@ public sealed class MainWindow : Window, IDisposable
             if (!FolderVisible(sub))
                 continue;
 
-            // While filtering, keep matching folders open so hits are visible without manual expanding.
-            if (_filter.Length > 0)
-                ImGui.SetNextItemOpen(true, ImGuiCond.Always);
+            // While filtering, keep matching folders open so hits are visible without manual expanding;
+            // otherwise honor our own open/closed state so Expand/Collapse All can drive it.
+            var filtering = _filter.Length > 0;
+            var open      = filtering || _openFolders.Contains(sub.FullKey);
+            ImGui.SetNextItemOpen(open, ImGuiCond.Always);
 
             ImGui.PushStyleColor(ImGuiCol.Text, FolderColor);
             var expanded = ImGui.TreeNodeEx($"{sub.Name}###f:{sub.FullKey}", ImGuiTreeNodeFlags.SpanAvailWidth);
             ImGui.PopStyleColor();
+
+            if (!filtering && ImGui.IsItemToggledOpen())
+            {
+                if (open)
+                    _openFolders.Remove(sub.FullKey);
+                else
+                    _openFolders.Add(sub.FullKey);
+            }
 
             if (expanded)
             {
@@ -190,14 +229,34 @@ public sealed class MainWindow : Window, IDisposable
         if (leaf.Mod.Directory == _selectedDir)
             flags |= ImGuiTreeNodeFlags.Selected;
 
-        ImGui.TreeNodeEx($"{leaf.DisplayName}###m:{leaf.Mod.Directory}", flags);
+        var style      = ImGui.GetStyle();
+        var countText  = leaf.Mod.Designs.Count.ToString();
+        var countWidth = ImGui.CalcTextSize(countText).X;
+
+        // Reserve room for the always-visible right-aligned count (and the info pip, when present),
+        // then truncate the name to the remaining space so resizing hides the name end, not the count.
+        var reserve = countWidth + style.ItemSpacing.X;
+        if (leaf.Mod.Unknown)
+        {
+            float pipWidth;
+            using (Plugin.PluginInterface.UiBuilder.IconFontHandle.Push())
+                pipWidth = ImGui.CalcTextSize(FontAwesomeIcon.InfoCircle.ToIconString()).X;
+            reserve += pipWidth + style.ItemInnerSpacing.X;
+        }
+
+        var nameBudget = ImGui.GetContentRegionAvail().X - ImGui.GetTreeNodeToLabelSpacing() - reserve;
+        var shownName  = Truncate(leaf.DisplayName, nameBudget);
+
+        ImGui.TreeNodeEx($"{shownName}###m:{leaf.Mod.Directory}", flags);
         if (ImGui.IsItemClicked())
             _selectedDir = leaf.Mod.Directory;
+        if (!ReferenceEquals(shownName, leaf.DisplayName) && ImGui.IsItemHovered())
+            ImGui.SetTooltip(leaf.DisplayName);
 
         // Persistent info pip: this mod is referenced by a design but isn't installed in Penumbra.
         if (leaf.Mod.Unknown)
         {
-            ImGui.SameLine(0, ImGui.GetStyle().ItemInnerSpacing.X);
+            ImGui.SameLine(0, style.ItemInnerSpacing.X);
             using (Plugin.PluginInterface.UiBuilder.IconFontHandle.Push())
                 ImGui.TextColored(InfoColor, FontAwesomeIcon.InfoCircle.ToIconString());
             if (ImGui.IsItemHovered())
@@ -205,12 +264,30 @@ public sealed class MainWindow : Window, IDisposable
                     $"Referenced by a Glamourer design but not present in your Penumbra mod list.\nDirectory: {leaf.Mod.Directory}");
         }
 
-        // Right-aligned design count.
-        var countText = leaf.Mod.Designs.Count.ToString();
-        var rightX    = ImGui.GetContentRegionMax().X - ImGui.CalcTextSize(countText).X;
+        // Right-aligned design count, always visible.
         ImGui.SameLine();
-        ImGui.SetCursorPosX(MathF.Max(ImGui.GetCursorPosX(), rightX));
+        ImGui.SetCursorPosX(ImGui.GetContentRegionMax().X - countWidth);
         ImGui.TextDisabled(countText);
+    }
+
+    /// <summary> Returns the text unchanged if it fits, otherwise a clipped copy ending in an ellipsis. </summary>
+    private static string Truncate(string text, float maxWidth)
+    {
+        if (maxWidth <= 0)
+            return string.Empty;
+        if (ImGui.CalcTextSize(text).X <= maxWidth)
+            return text;
+
+        const string ellipsis = "...";
+        var budget = maxWidth - ImGui.CalcTextSize(ellipsis).X;
+        if (budget <= 0)
+            return ellipsis;
+
+        var len = text.Length;
+        while (len > 0 && ImGui.CalcTextSize(text[..len]).X > budget)
+            --len;
+
+        return text[..len] + ellipsis;
     }
 
     private bool LeafVisible(ModLeaf leaf)
