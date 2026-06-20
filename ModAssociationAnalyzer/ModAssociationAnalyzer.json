@@ -1,0 +1,8 @@
+{
+  "Author": "efokschaner",
+  "Name": "Mod Association Analyzer",
+  "Punchline": "See which Glamourer designs reference each Penumbra mod.",
+  "Description": "Cross-references your Penumbra mod list against the Mod Associations stored in your Glamourer designs, so you can see which designs use a given mod. Read-only; reads data over public IPC and makes no changes to either plugin. Open with /modassoc.",
+  "ApplicableVersion": "any",
+  "Tags": [ "modding", "penumbra", "glamourer", "utility" ]
+}

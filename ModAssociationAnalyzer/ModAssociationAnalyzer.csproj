@@ -1,0 +1,22 @@
+<Project Sdk="Dalamud.NET.Sdk/15.0.0">
+  <PropertyGroup>
+    <Version>0.0.0.1</Version>
+    <Description>Cross-references Penumbra mods with the mods associated to Glamourer designs.</Description>
+    <PackageProjectUrl>https://github.com/efokschaner/ModAssociationAnalyzer</PackageProjectUrl>
+    <PackageLicenseExpression>AGPL-3.0-or-later</PackageLicenseExpression>
+    <IsPackable>false</IsPackable>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+  </PropertyGroup>
+
+  <!--
+    These are the published, typed IPC contract packages for the two host plugins.
+    We only *consume* their IPC; we take no source/runtime dependency on the plugins
+    themselves. Versions are pinned and were published well over 7 days ago.
+  -->
+  <ItemGroup>
+    <PackageReference Include="Penumbra.Api" Version="5.15.1" />
+    <PackageReference Include="Glamourer.Api" Version="2.8.2" />
+  </ItemGroup>
+</Project>
