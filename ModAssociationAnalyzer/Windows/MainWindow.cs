@@ -224,7 +224,8 @@ public sealed class MainWindow : Window, IDisposable
             var open      = filtering || _openFolders.Contains(sub.FullKey);
             ImGui.SetNextItemOpen(open, ImGuiCond.Always);
 
-            ImGui.PushStyleColor(ImGuiCol.Text, FolderColor);
+            var folderColor = sub.FullKey == ModTreeBuilder.NotInstalledFolder ? NotInstalledPip : FolderColor;
+            ImGui.PushStyleColor(ImGuiCol.Text, folderColor);
             var expanded = ImGui.TreeNodeEx($"{sub.Name}###f:{sub.FullKey}", ImGuiTreeNodeFlags.SpanAvailWidth);
             ImGui.PopStyleColor();
 

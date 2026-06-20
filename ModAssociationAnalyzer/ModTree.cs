@@ -35,7 +35,7 @@ public sealed class FolderNode(string name, string fullKey)
 /// </summary>
 public static class ModTreeBuilder
 {
-    private const string NotInstalledFolder = "(Not installed)";
+    public const string NotInstalledFolder = "(Not installed)";
 
     public static FolderNode Build(IEnumerable<ModEntry> mods)
     {
