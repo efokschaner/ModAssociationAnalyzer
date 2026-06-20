@@ -46,10 +46,18 @@ public sealed class ModAssociationIndex(PenumbraIpc penumbra, GlamourerIpc glamo
     {
         try
         {
-            // directory (immutable id, case-insensitive) -> entry
-            var byDir = new Dictionary<string, ModEntry>(StringComparer.OrdinalIgnoreCase);
+            // Index installed mods by directory (the immutable id) and by display name. The name map
+            // mirrors how Glamourer itself resolves associations (Interop/Penumbra/ModUsageInformer.
+            // ModMatches): match on directory first, then on name. Names are not unique, so the first
+            // installed mod with a given name wins the fallback.
+            var byDir  = new Dictionary<string, ModEntry>(StringComparer.OrdinalIgnoreCase);
+            var byName = new Dictionary<string, ModEntry>(StringComparer.OrdinalIgnoreCase);
             foreach (var (dir, name) in penumbra.GetMods())
-                byDir[dir] = new ModEntry(dir, name, []) { Path = penumbra.GetModFullPath(dir, name) };
+            {
+                var mod = new ModEntry(dir, name, []) { Path = penumbra.GetModFullPath(dir, name) };
+                byDir[dir] = mod;
+                byName.TryAdd(name, mod);
+            }
 
             var designs = glamourer.GetDesigns();
             DesignCount = designs.Count;
@@ -61,8 +69,9 @@ public sealed class ModAssociationIndex(PenumbraIpc penumbra, GlamourerIpc glamo
 
                 foreach (var entry in mods.OfType<JObject>())
                 {
-                    var dir = entry.Value<string>("Directory") ?? string.Empty;
-                    if (dir.Length == 0)
+                    var dir     = entry.Value<string>("Directory") ?? string.Empty;
+                    var modName = entry.Value<string>("Name") ?? string.Empty;
+                    if (dir.Length == 0 && modName.Length == 0)
                         continue;
 
                     // Serialization only writes the field(s) relevant to the chosen state, so
@@ -75,13 +84,23 @@ public sealed class ModAssociationIndex(PenumbraIpc penumbra, GlamourerIpc glamo
                         Remove: entry.Value<bool?>("Remove") ?? false,
                         Priority: entry.Value<int?>("Priority") ?? 0);
 
-                    if (!byDir.TryGetValue(dir, out var mod))
+                    // Match by directory, then fall back to name, exactly as Glamourer does.
+                    ModEntry? mod = null;
+                    if (dir.Length > 0)
+                        byDir.TryGetValue(dir, out mod);
+                    if (mod is null && modName.Length > 0)
+                        byName.TryGetValue(modName, out mod);
+
+                    if (mod is null)
                     {
-                        // The design references a mod that isn't in the current Penumbra list
-                        // (uninstalled / renamed directory). Surface it rather than dropping it.
-                        var fallbackName = entry.Value<string>("Name") ?? dir;
-                        mod = new ModEntry(dir, fallbackName, []) { Unknown = true };
-                        byDir[dir] = mod;
+                        // Referenced mod is not installed under this directory or name; surface it
+                        // instead of dropping it, deduped by directory (or name when no directory).
+                        var key = dir.Length > 0 ? dir : modName;
+                        if (!byDir.TryGetValue(key, out mod))
+                        {
+                            mod = new ModEntry(key, modName.Length > 0 ? modName : dir, []) { Unknown = true };
+                            byDir[key] = mod;
+                        }
                     }
 
                     mod.Designs.Add(assoc);
