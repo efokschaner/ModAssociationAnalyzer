@@ -24,20 +24,33 @@ public sealed class GlamourerIpc
         _openDesign       = new OpenDesign(pi);
     }
 
-    /// <summary> Whether Glamourer is installed and its IPC is responding. </summary>
+    private bool _available;
+    private long _nextCheckTick;
+
+    /// <summary>
+    /// Whether Glamourer is installed and its IPC is responding. Cached and re-checked at most
+    /// once per second so it can be read every frame without an IPC round-trip per tick.
+    /// </summary>
     public bool Available
     {
         get
         {
+            var now = Environment.TickCount64;
+            if (now < _nextCheckTick)
+                return _available;
+
+            _nextCheckTick = now + 1000;
             try
             {
                 var (major, _) = _apiVersion.Invoke();
-                return major > 0;
+                _available = major > 0;
             }
             catch
             {
-                return false;
+                _available = false;
             }
+
+            return _available;
         }
     }
 
