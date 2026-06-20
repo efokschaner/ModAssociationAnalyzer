@@ -8,9 +8,10 @@ namespace ModAssociationAnalyzer.Windows;
 
 public sealed class MainWindow : Window, IDisposable
 {
-    private static readonly Vector4 Warning = new(1.00f, 0.65f, 0.20f, 1f);
-    private static readonly Vector4 Error   = new(1.00f, 0.35f, 0.35f, 1f);
-    private static readonly Vector4 Muted   = new(0.65f, 0.65f, 0.65f, 1f);
+    private static readonly Vector4 Warning    = new(1.00f, 0.65f, 0.20f, 1f);
+    private static readonly Vector4 Error      = new(1.00f, 0.35f, 0.35f, 1f);
+    private static readonly Vector4 Muted      = new(0.65f, 0.65f, 0.65f, 1f);
+    private static readonly Vector4 FolderColor = new(0.86f, 0.70f, 0.20f, 1f);
 
     private readonly ModAssociationIndex _index;
     private readonly PenumbraIpc         _penumbra;
@@ -96,23 +97,65 @@ public sealed class MainWindow : Window, IDisposable
     }
 
     private void DrawModList()
+        => DrawFolder(_index.Root);
+
+    private void DrawFolder(FolderNode folder)
     {
-        foreach (var mod in _index.Mods)
+        foreach (var sub in folder.Folders.Values)
         {
-            if (_onlyWithDesigns && mod.Designs.Count == 0)
-                continue;
-            if (_filter.Length > 0 && !mod.Name.Contains(_filter, StringComparison.OrdinalIgnoreCase))
+            if (!FolderVisible(sub))
                 continue;
 
-            var label   = $"{mod.Name} ({mod.Designs.Count})###{mod.Directory}";
-            var selected = mod.Directory == _selectedDir;
-            if (ImGui.Selectable(label, selected))
-                _selectedDir = mod.Directory;
+            // While filtering, keep matching folders open so hits are visible without manual expanding.
+            if (_filter.Length > 0)
+                ImGui.SetNextItemOpen(true, ImGuiCond.Always);
 
-            if (mod.Unknown && ImGui.IsItemHovered())
-                ImGui.SetTooltip($"Referenced by a design but not in your current Penumbra mod list.\nDirectory: {mod.Directory}");
+            ImGui.PushStyleColor(ImGuiCol.Text, FolderColor);
+            var expanded = ImGui.TreeNodeEx($"{sub.Name}###f:{sub.FullKey}", ImGuiTreeNodeFlags.SpanAvailWidth);
+            ImGui.PopStyleColor();
+
+            if (expanded)
+            {
+                DrawFolder(sub);
+                ImGui.TreePop();
+            }
+        }
+
+        foreach (var leaf in folder.Mods)
+        {
+            if (LeafVisible(leaf))
+                DrawLeaf(leaf);
         }
     }
+
+    private void DrawLeaf(ModLeaf leaf)
+    {
+        var flags = ImGuiTreeNodeFlags.Leaf | ImGuiTreeNodeFlags.NoTreePushOnOpen | ImGuiTreeNodeFlags.SpanAvailWidth;
+        if (leaf.Mod.Directory == _selectedDir)
+            flags |= ImGuiTreeNodeFlags.Selected;
+
+        ImGui.TreeNodeEx($"{leaf.DisplayName} ({leaf.Mod.Designs.Count})###m:{leaf.Mod.Directory}", flags);
+        if (ImGui.IsItemClicked())
+            _selectedDir = leaf.Mod.Directory;
+
+        if (leaf.Mod.Unknown && ImGui.IsItemHovered())
+            ImGui.SetTooltip($"Referenced by a design but not in your current Penumbra mod list.\nDirectory: {leaf.Mod.Directory}");
+    }
+
+    private bool LeafVisible(ModLeaf leaf)
+    {
+        if (_onlyWithDesigns && leaf.Mod.Designs.Count == 0)
+            return false;
+        if (_filter.Length == 0)
+            return true;
+
+        return leaf.DisplayName.Contains(_filter, StringComparison.OrdinalIgnoreCase)
+         || leaf.Mod.Name.Contains(_filter, StringComparison.OrdinalIgnoreCase)
+         || leaf.Mod.Path.Contains(_filter, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private bool FolderVisible(FolderNode folder)
+        => folder.Mods.Any(LeafVisible) || folder.Folders.Values.Any(FolderVisible);
 
     private void DrawDesignsForSelection()
     {

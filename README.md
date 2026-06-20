@@ -14,15 +14,24 @@ Glamourer is modified, which is why it can ship and be tested independently of e
 ## How it works
 
 - **Penumbra IPC** — `GetModList` enumerates installed mods (`directory -> name`);
-  `OpenMainWindow(Mods, directory, name)` jumps to a mod.
+  `GetModPath` returns each mod's full path in Penumbra's folder tree (e.g.
+  `Outfits/Bikinis/Cool Mod`), which we use to reconstruct the same folder tree shown in
+  Penumbra's Mods tab; `OpenMainWindow(Mods, directory, name)` jumps to a mod.
 - **Glamourer IPC** — `GetDesignList` enumerates designs (`guid -> name`);
   `GetDesignJObject(guid)` returns the design's serialized JSON, whose top-level `"Mods"`
   array is exactly the Mod Associations data (directory, name, enabled/inherit/remove,
   priority); `OpenDesign(guid)` jumps to a design.
 
 `ModAssociationIndex` builds a reverse index keyed on the mod **directory name** (the
-immutable id Glamourer also matches on), so renames don't break the mapping. Designs that
-reference an uninstalled/renamed mod are still surfaced (flagged "Unknown").
+immutable id Glamourer also matches on), so renames don't break the mapping, and
+reconstructs Penumbra's folder tree from the per-mod full paths. The left pane mirrors
+Penumbra's Mods tab: a filterable folder tree (filtering auto-expands matching folders),
+with each mod showing its design-reference count. Designs that reference an
+uninstalled/renamed mod are still surfaced under a "(Not installed)" folder.
+
+> Note: Penumbra's own tree is built on the Luna `FileSystem<T>` / `FileSystemDrawer<T>`
+> framework (with ImSharp), which can't be lifted out standalone, so the tree here is a
+> minimal re-implementation over Dalamud's ImGui bindings fed by the IPC paths.
 
 The typed IPC contracts come from the published [`Penumbra.Api`] and [`Glamourer.Api`]
 NuGet packages — the same packages the host plugins publish for exactly this purpose.

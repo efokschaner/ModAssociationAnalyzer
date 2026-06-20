@@ -24,6 +24,9 @@ public sealed record ModEntry(string Directory, string Name, List<AssociatedDesi
 {
     /// <summary> True when the mod is referenced by a design but is not in the current Penumbra mod list. </summary>
     public bool Unknown { get; init; }
+
+    /// <summary> Full path in Penumbra's mod folder tree (e.g. "Outfits/Cool Mod"); empty/unknown otherwise. </summary>
+    public string Path { get; init; } = string.Empty;
 }
 
 /// <summary>
@@ -34,6 +37,7 @@ public sealed record ModEntry(string Directory, string Name, List<AssociatedDesi
 public sealed class ModAssociationIndex(PenumbraIpc penumbra, GlamourerIpc glamourer)
 {
     public IReadOnlyList<ModEntry> Mods        { get; private set; } = [];
+    public FolderNode              Root        { get; private set; } = new(string.Empty, string.Empty);
     public int                     DesignCount { get; private set; }
     public DateTime                LastRefresh { get; private set; }
     public string?                 LastError   { get; private set; }
@@ -45,7 +49,7 @@ public sealed class ModAssociationIndex(PenumbraIpc penumbra, GlamourerIpc glamo
             // directory (immutable id, case-insensitive) -> entry
             var byDir = new Dictionary<string, ModEntry>(StringComparer.OrdinalIgnoreCase);
             foreach (var (dir, name) in penumbra.GetMods())
-                byDir[dir] = new ModEntry(dir, name, []);
+                byDir[dir] = new ModEntry(dir, name, []) { Path = penumbra.GetModFullPath(dir, name) };
 
             var designs = glamourer.GetDesigns();
             DesignCount = designs.Count;
@@ -85,6 +89,7 @@ public sealed class ModAssociationIndex(PenumbraIpc penumbra, GlamourerIpc glamo
             }
 
             Mods        = byDir.Values.OrderBy(m => m.Name, StringComparer.OrdinalIgnoreCase).ToList();
+            Root        = ModTreeBuilder.Build(Mods);
             LastError   = null;
             LastRefresh = DateTime.Now;
         }

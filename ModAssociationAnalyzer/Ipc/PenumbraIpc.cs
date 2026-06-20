@@ -11,11 +11,13 @@ namespace ModAssociationAnalyzer.Ipc;
 public sealed class PenumbraIpc
 {
     private readonly GetModList     _getModList;
+    private readonly GetModPath     _getModPath;
     private readonly OpenMainWindow _openMainWindow;
 
     public PenumbraIpc(IDalamudPluginInterface pi)
     {
         _getModList     = new GetModList(pi);
+        _getModPath     = new GetModPath(pi);
         _openMainWindow = new OpenMainWindow(pi);
     }
 
@@ -39,6 +41,23 @@ public sealed class PenumbraIpc
         {
             Available = false;
             return new Dictionary<string, string>();
+        }
+    }
+
+    /// <summary>
+    /// The mod's full path in Penumbra's mod folder tree (e.g. "Outfits/Bikinis/Cool Mod").
+    /// Falls back to the bare mod name if Penumbra has no custom sort path or is unavailable.
+    /// </summary>
+    public string GetModFullPath(string directory, string name)
+    {
+        try
+        {
+            var (ec, path, _, _) = _getModPath.Invoke(directory, name);
+            return ec == PenumbraApiEc.Success && path.Length > 0 ? path : name;
+        }
+        catch
+        {
+            return name;
         }
     }
 
