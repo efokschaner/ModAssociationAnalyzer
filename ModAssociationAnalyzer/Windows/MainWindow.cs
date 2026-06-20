@@ -190,20 +190,27 @@ public sealed class MainWindow : Window, IDisposable
         if (leaf.Mod.Directory == _selectedDir)
             flags |= ImGuiTreeNodeFlags.Selected;
 
-        ImGui.TreeNodeEx($"{leaf.DisplayName} ({leaf.Mod.Designs.Count})###m:{leaf.Mod.Directory}", flags);
+        ImGui.TreeNodeEx($"{leaf.DisplayName}###m:{leaf.Mod.Directory}", flags);
         if (ImGui.IsItemClicked())
             _selectedDir = leaf.Mod.Directory;
 
-        if (!leaf.Mod.Unknown)
-            return;
-
         // Persistent info pip: this mod is referenced by a design but isn't installed in Penumbra.
-        ImGui.SameLine(0, ImGui.GetStyle().ItemInnerSpacing.X);
-        using (Plugin.PluginInterface.UiBuilder.IconFontHandle.Push())
-            ImGui.TextColored(InfoColor, FontAwesomeIcon.InfoCircle.ToIconString());
-        if (ImGui.IsItemHovered())
-            ImGui.SetTooltip(
-                $"Referenced by a Glamourer design but not present in your Penumbra mod list.\nDirectory: {leaf.Mod.Directory}");
+        if (leaf.Mod.Unknown)
+        {
+            ImGui.SameLine(0, ImGui.GetStyle().ItemInnerSpacing.X);
+            using (Plugin.PluginInterface.UiBuilder.IconFontHandle.Push())
+                ImGui.TextColored(InfoColor, FontAwesomeIcon.InfoCircle.ToIconString());
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip(
+                    $"Referenced by a Glamourer design but not present in your Penumbra mod list.\nDirectory: {leaf.Mod.Directory}");
+        }
+
+        // Right-aligned design count.
+        var countText = leaf.Mod.Designs.Count.ToString();
+        var rightX    = ImGui.GetContentRegionMax().X - ImGui.CalcTextSize(countText).X;
+        ImGui.SameLine();
+        ImGui.SetCursorPosX(MathF.Max(ImGui.GetCursorPosX(), rightX));
+        ImGui.TextDisabled(countText);
     }
 
     private bool LeafVisible(ModLeaf leaf)
