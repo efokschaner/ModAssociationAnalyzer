@@ -39,6 +39,12 @@ public sealed class Plugin : IDalamudPlugin
 
         PluginInterface.UiBuilder.Draw       += WindowSystem.Draw;
         PluginInterface.UiBuilder.OpenMainUi += ToggleMainUi;
+
+        // Dev convenience: when iterating on a dev plugin, a rebuild makes Dalamud reload us.
+        // Re-open the window automatically on that reload so we don't need /modassoc each build.
+        // Scoped to dev plugins so released installs never auto-pop the window.
+        if (PluginInterface.IsDev && PluginInterface.Reason == PluginLoadReason.Reload)
+            _mainWindow.IsOpen = true;
     }
 
     public void Dispose()
