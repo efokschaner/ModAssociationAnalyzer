@@ -270,7 +270,7 @@ public sealed class MainWindow : Window, IDisposable
         ImGui.TextDisabled(countText);
     }
 
-    /// <summary> Returns the text unchanged if it fits, otherwise a clipped copy ending in an ellipsis. </summary>
+    /// <summary> Returns the text unchanged if it fits, otherwise the longest prefix that fits. </summary>
     private static string Truncate(string text, float maxWidth)
     {
         if (maxWidth <= 0)
@@ -278,16 +278,11 @@ public sealed class MainWindow : Window, IDisposable
         if (ImGui.CalcTextSize(text).X <= maxWidth)
             return text;
 
-        const string ellipsis = "...";
-        var budget = maxWidth - ImGui.CalcTextSize(ellipsis).X;
-        if (budget <= 0)
-            return ellipsis;
-
         var len = text.Length;
-        while (len > 0 && ImGui.CalcTextSize(text[..len]).X > budget)
+        while (len > 0 && ImGui.CalcTextSize(text[..len]).X > maxWidth)
             --len;
 
-        return text[..len] + ellipsis;
+        return text[..len];
     }
 
     private bool LeafVisible(ModLeaf leaf)
