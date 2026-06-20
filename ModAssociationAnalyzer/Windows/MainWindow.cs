@@ -8,10 +8,16 @@ namespace ModAssociationAnalyzer.Windows;
 
 public sealed class MainWindow : Window, IDisposable
 {
-    private static readonly Vector4 Warning    = new(1.00f, 0.65f, 0.20f, 1f);
-    private static readonly Vector4 Error      = new(1.00f, 0.35f, 0.35f, 1f);
-    private static readonly Vector4 Muted      = new(0.65f, 0.65f, 0.65f, 1f);
-    private static readonly Vector4 FolderColor = new(0.86f, 0.70f, 0.20f, 1f);
+    private static readonly Vector4 Warning     = new(1.00f, 0.65f, 0.20f, 1f);
+    private static readonly Vector4 Error       = new(1.00f, 0.35f, 0.35f, 1f);
+    private static readonly Vector4 Muted       = new(0.65f, 0.65f, 0.65f, 1f);
+
+    // Penumbra's folder color (ColorId.FolderExpanded == 0xFFFFF0C0, ABGR) - a pale cream,
+    // used purely to set folder rows apart from mod rows.
+    private static readonly Vector4 FolderColor = new(0.753f, 0.941f, 1.000f, 1f);
+
+    // Info-pip color for mods referenced by a design but not installed in Penumbra.
+    private static readonly Vector4 InfoColor   = new(0.45f, 0.78f, 1.00f, 1f);
 
     private readonly ModAssociationIndex _index;
     private readonly PenumbraIpc         _penumbra;
@@ -138,8 +144,15 @@ public sealed class MainWindow : Window, IDisposable
         if (ImGui.IsItemClicked())
             _selectedDir = leaf.Mod.Directory;
 
-        if (leaf.Mod.Unknown && ImGui.IsItemHovered())
-            ImGui.SetTooltip($"Referenced by a design but not in your current Penumbra mod list.\nDirectory: {leaf.Mod.Directory}");
+        if (!leaf.Mod.Unknown)
+            return;
+
+        // Persistent info pip: this mod is referenced by a design but isn't installed in Penumbra.
+        ImGui.SameLine(0, ImGui.GetStyle().ItemInnerSpacing.X);
+        ImGui.TextColored(InfoColor, "(i)");
+        if (ImGui.IsItemHovered())
+            ImGui.SetTooltip(
+                $"Referenced by a Glamourer design but not present in your Penumbra mod list.\nDirectory: {leaf.Mod.Directory}");
     }
 
     private bool LeafVisible(ModLeaf leaf)
