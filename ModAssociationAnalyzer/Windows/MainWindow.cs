@@ -37,6 +37,8 @@ public sealed class MainWindow : Window, IDisposable
     private DesignFilter _designFilter = DesignFilter.All;
     private string?      _selectedDir;
     private float        _leftWidth    = 280f;
+    private bool         _autoRefresh  = true;
+    private bool         _wasFocused;
 
     // We own folder open/closed state (keyed by FolderNode.FullKey) rather than relying on
     // ImGui's internal tree storage, so Expand/Collapse All can act on the whole tree.
@@ -73,6 +75,13 @@ public sealed class MainWindow : Window, IDisposable
 
     public override void Draw()
     {
+        // Glamourer exposes no design-changed event, so approximate "refresh on design change" by
+        // refreshing whenever the window appears or regains focus (cheap relative to a full poll).
+        var focused = ImGui.IsWindowFocused(ImGuiFocusedFlags.RootAndChildWindows);
+        if (_autoRefresh && (ImGui.IsWindowAppearing() || (focused && !_wasFocused)))
+            _index.Refresh();
+        _wasFocused = focused;
+
         if (!_penumbra.Available)
             ImGui.TextColored(Warning, "Penumbra is not available - the mod list will be empty.");
         if (!_glamourer.Available)
@@ -90,6 +99,13 @@ public sealed class MainWindow : Window, IDisposable
     {
         if (ImGui.Button("Refresh"))
             _index.Refresh();
+
+        ImGui.SameLine();
+        ImGui.Checkbox("Auto-refresh", ref _autoRefresh);
+        if (ImGui.IsItemHovered())
+            ImGui.SetTooltip(
+                "Glamourer has no design-changed event, so this refreshes when the window\n"
+              + "is opened or regains focus. Use the Refresh button for an immediate update.");
 
         ImGui.SameLine();
         ImGui.AlignTextToFramePadding();
