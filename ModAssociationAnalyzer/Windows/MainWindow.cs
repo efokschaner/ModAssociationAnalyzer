@@ -1,4 +1,5 @@
 using System.Numerics;
+using Dalamud.Interface;
 using Dalamud.Interface.Utility;
 using Dalamud.Interface.Windowing;
 using Dalamud.Bindings.ImGui;
@@ -149,7 +150,8 @@ public sealed class MainWindow : Window, IDisposable
 
         // Persistent info pip: this mod is referenced by a design but isn't installed in Penumbra.
         ImGui.SameLine(0, ImGui.GetStyle().ItemInnerSpacing.X);
-        ImGui.TextColored(InfoColor, "(i)");
+        using (Plugin.PluginInterface.UiBuilder.IconFontHandle.Push())
+            ImGui.TextColored(InfoColor, FontAwesomeIcon.InfoCircle.ToIconString());
         if (ImGui.IsItemHovered())
             ImGui.SetTooltip(
                 $"Referenced by a Glamourer design but not present in your Penumbra mod list.\nDirectory: {leaf.Mod.Directory}");
