@@ -73,9 +73,6 @@ public sealed class MainWindow : Window, IDisposable
 
     public override void Draw()
     {
-        DrawToolbar();
-        ImGui.Separator();
-
         if (!_penumbra.Available)
             ImGui.TextColored(Warning, "Penumbra is not available - the mod list will be empty.");
         if (!_glamourer.Available)
@@ -84,35 +81,56 @@ public sealed class MainWindow : Window, IDisposable
             ImGui.TextColored(Error, $"Error during refresh: {err}");
 
         DrawSplit();
+
+        ImGui.Separator();
+        DrawFooter();
     }
 
-    private void DrawToolbar()
+    private void DrawFooter()
     {
         if (ImGui.Button("Refresh"))
             _index.Refresh();
 
         ImGui.SameLine();
+        ImGui.AlignTextToFramePadding();
         if (_index.LastRefresh == default)
             ImGui.TextColored(Muted, "Not loaded yet.");
         else
             ImGui.TextColored(Muted,
                 $"{_index.DesignCount} designs scanned, last refreshed {_index.LastRefresh:HH:mm:ss}.");
+    }
 
-        ImGui.SameLine();
-        ImGui.SetNextItemWidth(230 * ImGuiHelpers.GlobalScale);
-        if (ImGui.BeginCombo("##designFilter", DesignFilterLabel(_designFilter)))
+    // A full-width filter input with a small dropdown button on its right for the design-usage
+    // filter, mirroring the search bar Penumbra puts at the top of its mod tree.
+    private void DrawFilterRow()
+    {
+        var style       = ImGui.GetStyle();
+        var buttonWidth = ImGui.GetFrameHeight();
+        var inputWidth  = ImGui.GetContentRegionAvail().X - buttonWidth - style.ItemInnerSpacing.X;
+
+        ImGui.SetNextItemWidth(inputWidth);
+        ImGui.InputTextWithHint("##filter", "Filter mods...", ref _filter, 256);
+
+        ImGui.SameLine(0, style.ItemInnerSpacing.X);
+        using (Plugin.PluginInterface.UiBuilder.IconFontHandle.Push())
+        {
+            if (ImGui.Button($"{FontAwesomeIcon.Filter.ToIconString()}##designFilter", new Vector2(buttonWidth)))
+                ImGui.OpenPopup("##designFilterPopup");
+        }
+
+        if (ImGui.IsItemHovered())
+            ImGui.SetTooltip($"Filter by design usage: {DesignFilterLabel(_designFilter)}");
+
+        if (ImGui.BeginPopup("##designFilterPopup"))
         {
             foreach (var option in Enum.GetValues<DesignFilter>())
             {
-                if (ImGui.Selectable(DesignFilterLabel(option), option == _designFilter))
+                if (ImGui.RadioButton(DesignFilterLabel(option), option == _designFilter))
                     _designFilter = option;
             }
 
-            ImGui.EndCombo();
+            ImGui.EndPopup();
         }
-
-        ImGui.SetNextItemWidth(230 * ImGuiHelpers.GlobalScale);
-        ImGui.InputTextWithHint("##filter", "Filter mods...", ref _filter, 256);
     }
 
     private void DrawSplit()
@@ -121,22 +139,32 @@ public sealed class MainWindow : Window, IDisposable
         var handle  = 3f   * ImGuiHelpers.GlobalScale;
         var minPane = 150f * ImGuiHelpers.GlobalScale;
 
+        // Reserve space at the bottom for the separator + footer (Refresh row).
+        var footer     = ImGui.GetFrameHeightWithSpacing() + ImGui.GetStyle().ItemSpacing.Y;
+        var bodyHeight = MathF.Max(minPane, avail.Y - footer);
+
         // Keep both panes usable as the window (and the split) is resized.
         var maxLeft = avail.X - handle - minPane;
         _leftWidth = Math.Clamp(_leftWidth, minPane, MathF.Max(minPane, maxLeft));
 
-        using (var left = Child("##mods", new Vector2(_leftWidth, 0), true))
+        using (var left = Child("##mods", new Vector2(_leftWidth, bodyHeight), true))
         {
             if (left)
-                DrawModList();
+            {
+                // Filter row stays pinned at the top; the tree scrolls below it.
+                DrawFilterRow();
+                using var tree = Child("##modsTree", new Vector2(0, 0), false);
+                if (tree)
+                    DrawModList();
+            }
         }
 
         // No item spacing around the divider so the gutter stays as thin as the handle itself.
         ImGui.SameLine(0, 0);
-        DrawSplitter(handle, avail.Y);
+        DrawSplitter(handle, bodyHeight);
         ImGui.SameLine(0, 0);
 
-        using (var right = Child("##designs", new Vector2(0, 0), true))
+        using (var right = Child("##designs", new Vector2(0, bodyHeight), true))
         {
             if (right)
                 DrawDesignsForSelection();
