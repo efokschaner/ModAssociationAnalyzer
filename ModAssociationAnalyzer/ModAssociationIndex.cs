@@ -27,6 +27,9 @@ public sealed record ModEntry(string Directory, string Name, List<AssociatedDesi
 
     /// <summary> Full path in Penumbra's mod folder tree (e.g. "Outfits/Cool Mod"); empty/unknown otherwise. </summary>
     public string Path { get; init; } = string.Empty;
+
+    /// <summary> True when at least one referencing design stored a different name or directory than this mod has now. </summary>
+    public bool HasMismatch { get; set; }
 }
 
 /// <summary>
@@ -101,6 +104,15 @@ public sealed class ModAssociationIndex(PenumbraIpc penumbra, GlamourerIpc glamo
                             mod = new ModEntry(key, modName.Length > 0 ? modName : dir, []) { Unknown = true };
                             byDir[key] = mod;
                         }
+                    }
+                    else
+                    {
+                        // Matched an installed mod, but flag it if the design stored a stale id
+                        // (matched on one of directory/name while the other differs).
+                        var dirMismatch  = dir.Length > 0     && !string.Equals(dir, mod.Directory, StringComparison.OrdinalIgnoreCase);
+                        var nameMismatch = modName.Length > 0 && !string.Equals(modName, mod.Name, StringComparison.OrdinalIgnoreCase);
+                        if (dirMismatch || nameMismatch)
+                            mod.HasMismatch = true;
                     }
 
                     mod.Designs.Add(assoc);

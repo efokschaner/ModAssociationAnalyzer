@@ -17,8 +17,10 @@ public sealed class MainWindow : Window, IDisposable
     // used purely to set folder rows apart from mod rows.
     private static readonly Vector4 FolderColor = new(0.753f, 0.941f, 1.000f, 1f);
 
-    // Info-pip color for mods referenced by a design but not installed in Penumbra.
-    private static readonly Vector4 InfoColor   = new(0.45f, 0.78f, 1.00f, 1f);
+    // Pip colors: red for mods referenced by a design but not installed; yellow when a design
+    // references an installed mod by a stale name/directory (matched on the other field).
+    private static readonly Vector4 NotInstalledPip = new(0.95f, 0.35f, 0.35f, 1f);
+    private static readonly Vector4 MismatchPip     = new(0.95f, 0.82f, 0.25f, 1f);
 
     private readonly ModAssociationIndex _index;
     private readonly PenumbraIpc         _penumbra;
@@ -232,17 +234,13 @@ public sealed class MainWindow : Window, IDisposable
         var style      = ImGui.GetStyle();
         var countText  = leaf.Mod.Designs.Count.ToString();
         var countWidth = ImGui.CalcTextSize(countText).X;
+        var pip        = PipFor(leaf.Mod);
 
-        // Reserve room for the always-visible right-aligned count (and the info pip, when present),
+        // Reserve room for the always-visible right-aligned count (and the status pip, when present),
         // then truncate the name to the remaining space so resizing hides the name end, not the count.
         var reserve = countWidth + style.ItemSpacing.X;
-        if (leaf.Mod.Unknown)
-        {
-            float pipWidth;
-            using (Plugin.PluginInterface.UiBuilder.IconFontHandle.Push())
-                pipWidth = ImGui.CalcTextSize(FontAwesomeIcon.InfoCircle.ToIconString()).X;
-            reserve += pipWidth + style.ItemInnerSpacing.X;
-        }
+        if (pip is not null)
+            reserve += PipWidth() + style.ItemInnerSpacing.X;
 
         var nameBudget = ImGui.GetContentRegionAvail().X - ImGui.GetTreeNodeToLabelSpacing() - reserve;
         var shownName  = Truncate(leaf.DisplayName, nameBudget);
@@ -253,21 +251,44 @@ public sealed class MainWindow : Window, IDisposable
         if (!ReferenceEquals(shownName, leaf.DisplayName) && ImGui.IsItemHovered())
             ImGui.SetTooltip(leaf.DisplayName);
 
-        // Persistent info pip: this mod is referenced by a design but isn't installed in Penumbra.
-        if (leaf.Mod.Unknown)
+        // Status pip: red when not installed, yellow on a stale name/directory mismatch.
+        if (pip is { } p)
         {
             ImGui.SameLine(0, style.ItemInnerSpacing.X);
-            using (Plugin.PluginInterface.UiBuilder.IconFontHandle.Push())
-                ImGui.TextColored(InfoColor, FontAwesomeIcon.InfoCircle.ToIconString());
-            if (ImGui.IsItemHovered())
-                ImGui.SetTooltip(
-                    $"Referenced by a Glamourer design but not present in your Penumbra mod list.\nDirectory: {leaf.Mod.Directory}");
+            DrawPip(p.Color, p.Tooltip);
         }
 
         // Right-aligned design count, always visible.
         ImGui.SameLine();
         ImGui.SetCursorPosX(ImGui.GetContentRegionMax().X - countWidth);
         ImGui.TextDisabled(countText);
+    }
+
+    /// <summary> The status pip (color + tooltip) for a mod, or null when it is clean. </summary>
+    private static (Vector4 Color, string Tooltip)? PipFor(ModEntry mod)
+    {
+        if (mod.Unknown)
+            return (NotInstalledPip,
+                $"Referenced by a Glamourer design but not present in your Penumbra mod list.\nDirectory: {mod.Directory}");
+        if (mod.HasMismatch)
+            return (MismatchPip,
+                "A design references this mod by a different name or directory than Penumbra has now\n"
+              + "(it was matched on the other field). The design likely stores a stale id.");
+        return null;
+    }
+
+    private static float PipWidth()
+    {
+        using (Plugin.PluginInterface.UiBuilder.IconFontHandle.Push())
+            return ImGui.CalcTextSize(FontAwesomeIcon.InfoCircle.ToIconString()).X;
+    }
+
+    private static void DrawPip(Vector4 color, string tooltip)
+    {
+        using (Plugin.PluginInterface.UiBuilder.IconFontHandle.Push())
+            ImGui.TextColored(color, FontAwesomeIcon.InfoCircle.ToIconString());
+        if (ImGui.IsItemHovered())
+            ImGui.SetTooltip(tooltip);
     }
 
     /// <summary> Returns the text unchanged if it fits, otherwise the longest prefix that fits. </summary>
@@ -314,6 +335,12 @@ public sealed class MainWindow : Window, IDisposable
         }
 
         ImGui.TextUnformatted(mod.Name);
+        if (PipFor(mod) is { } headerPip)
+        {
+            ImGui.SameLine(0, ImGui.GetStyle().ItemInnerSpacing.X);
+            DrawPip(headerPip.Color, headerPip.Tooltip);
+        }
+
         ImGui.TextColored(Muted, mod.Directory);
         if (ImGui.Button("Open in Penumbra"))
             _penumbra.OpenMod(mod.Directory, mod.Name);
