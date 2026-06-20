@@ -78,5 +78,9 @@ Locations, then enable the plugin in `/xlplugins`.
 When loaded as a dev plugin, a rebuild makes Dalamud reload the plugin and the window
 re-opens automatically, so the iterate-on-UI loop doesn't need a `/modassoc` each time.
 
+## License
+
+MIT — see [`LICENSE`](LICENSE).
+
 [`Penumbra.Api`]: https://www.nuget.org/packages/Penumbra.Api
 [`Glamourer.Api`]: https://www.nuget.org/packages/Glamourer.Api

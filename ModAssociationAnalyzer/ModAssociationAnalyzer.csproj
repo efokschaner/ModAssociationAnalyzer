@@ -3,7 +3,7 @@
     <Version>0.0.0.1</Version>
     <Description>Cross-references Penumbra mods with the mods associated to Glamourer designs.</Description>
     <PackageProjectUrl>https://github.com/efokschaner/ModAssociationAnalyzer</PackageProjectUrl>
-    <PackageLicenseExpression>AGPL-3.0-or-later</PackageLicenseExpression>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <IsPackable>false</IsPackable>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
