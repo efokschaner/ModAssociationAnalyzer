@@ -10,56 +10,34 @@ namespace ModAssociationAnalyzer.Ipc;
 /// </summary>
 public sealed class PenumbraIpc
 {
-    private readonly ApiVersion     _apiVersion;
     private readonly GetModList     _getModList;
     private readonly OpenMainWindow _openMainWindow;
 
     public PenumbraIpc(IDalamudPluginInterface pi)
     {
-        _apiVersion     = new ApiVersion(pi);
         _getModList     = new GetModList(pi);
         _openMainWindow = new OpenMainWindow(pi);
     }
 
-    private bool _available;
-    private long _nextCheckTick;
-
     /// <summary>
-    /// Whether Penumbra is installed and its IPC is responding. Cached and re-checked at most
-    /// once per second so it can be read every frame without an IPC round-trip per tick.
+    /// Whether Penumbra was loaded and responding the last time we read from it. There is no
+    /// separate liveness probe: the act of reading data is the check (an IPC call against an
+    /// unloaded plugin throws), so this reflects the result of the most recent <see cref="GetMods"/>.
     /// </summary>
-    public bool Available
-    {
-        get
-        {
-            var now = Environment.TickCount64;
-            if (now < _nextCheckTick)
-                return _available;
-
-            _nextCheckTick = now + 1000;
-            try
-            {
-                var (breaking, _) = _apiVersion.Invoke();
-                _available = breaking > 0;
-            }
-            catch
-            {
-                _available = false;
-            }
-
-            return _available;
-        }
-    }
+    public bool Available { get; private set; }
 
     /// <summary> Maps mod directory name (immutable id) to current display name. </summary>
     public IReadOnlyDictionary<string, string> GetMods()
     {
         try
         {
-            return _getModList.Invoke();
+            var mods  = _getModList.Invoke();
+            Available = true;
+            return mods;
         }
         catch
         {
+            Available = false;
             return new Dictionary<string, string>();
         }
     }

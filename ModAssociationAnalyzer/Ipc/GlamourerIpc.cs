@@ -11,58 +11,36 @@ namespace ModAssociationAnalyzer.Ipc;
 /// </summary>
 public sealed class GlamourerIpc
 {
-    private readonly ApiVersion       _apiVersion;
     private readonly GetDesignList    _getDesignList;
     private readonly GetDesignJObject _getDesignJObject;
     private readonly OpenDesign       _openDesign;
 
     public GlamourerIpc(IDalamudPluginInterface pi)
     {
-        _apiVersion       = new ApiVersion(pi);
         _getDesignList    = new GetDesignList(pi);
         _getDesignJObject = new GetDesignJObject(pi);
         _openDesign       = new OpenDesign(pi);
     }
 
-    private bool _available;
-    private long _nextCheckTick;
-
     /// <summary>
-    /// Whether Glamourer is installed and its IPC is responding. Cached and re-checked at most
-    /// once per second so it can be read every frame without an IPC round-trip per tick.
+    /// Whether Glamourer was loaded and responding the last time we read from it. There is no
+    /// separate liveness probe: the act of reading data is the check (an IPC call against an
+    /// unloaded plugin throws), so this reflects the result of the most recent <see cref="GetDesigns"/>.
     /// </summary>
-    public bool Available
-    {
-        get
-        {
-            var now = Environment.TickCount64;
-            if (now < _nextCheckTick)
-                return _available;
-
-            _nextCheckTick = now + 1000;
-            try
-            {
-                var (major, _) = _apiVersion.Invoke();
-                _available = major > 0;
-            }
-            catch
-            {
-                _available = false;
-            }
-
-            return _available;
-        }
-    }
+    public bool Available { get; private set; }
 
     /// <summary> Maps design id to current display name. </summary>
     public IReadOnlyDictionary<Guid, string> GetDesigns()
     {
         try
         {
-            return _getDesignList.Invoke();
+            var designs = _getDesignList.Invoke();
+            Available   = true;
+            return designs;
         }
         catch
         {
+            Available = false;
             return new Dictionary<Guid, string>();
         }
     }
