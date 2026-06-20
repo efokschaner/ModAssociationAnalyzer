@@ -24,10 +24,24 @@ public sealed class MainWindow : Window, IDisposable
     private readonly PenumbraIpc         _penumbra;
     private readonly GlamourerIpc        _glamourer;
 
-    private string  _filter          = string.Empty;
-    private bool    _onlyWithDesigns = true;
-    private string? _selectedDir;
-    private float   _leftWidth       = 280f;
+    private enum DesignFilter
+    {
+        All,
+        WithDesigns,
+        WithoutDesigns,
+    }
+
+    private string       _filter       = string.Empty;
+    private DesignFilter _designFilter = DesignFilter.All;
+    private string?      _selectedDir;
+    private float        _leftWidth    = 280f;
+
+    private static string DesignFilterLabel(DesignFilter filter) => filter switch
+    {
+        DesignFilter.WithDesigns    => "Only mods used by a design",
+        DesignFilter.WithoutDesigns => "Only mods used by no designs",
+        _                           => "All mods",
+    };
 
     public MainWindow(ModAssociationIndex index, PenumbraIpc penumbra, GlamourerIpc glamourer)
         : base("Mod Association Analyzer###ModAssociationAnalyzerMain")
@@ -79,9 +93,19 @@ public sealed class MainWindow : Window, IDisposable
                 $"{_index.DesignCount} designs scanned, last refreshed {_index.LastRefresh:HH:mm:ss}.");
 
         ImGui.SameLine();
-        ImGui.Checkbox("Only mods used by a design", ref _onlyWithDesigns);
+        ImGui.SetNextItemWidth(230 * ImGuiHelpers.GlobalScale);
+        if (ImGui.BeginCombo("##designFilter", DesignFilterLabel(_designFilter)))
+        {
+            foreach (var option in Enum.GetValues<DesignFilter>())
+            {
+                if (ImGui.Selectable(DesignFilterLabel(option), option == _designFilter))
+                    _designFilter = option;
+            }
 
-        ImGui.SetNextItemWidth(220 * ImGuiHelpers.GlobalScale);
+            ImGui.EndCombo();
+        }
+
+        ImGui.SetNextItemWidth(230 * ImGuiHelpers.GlobalScale);
         ImGui.InputTextWithHint("##filter", "Filter mods...", ref _filter, 256);
     }
 
@@ -184,8 +208,12 @@ public sealed class MainWindow : Window, IDisposable
 
     private bool LeafVisible(ModLeaf leaf)
     {
-        if (_onlyWithDesigns && leaf.Mod.Designs.Count == 0)
-            return false;
+        switch (_designFilter)
+        {
+            case DesignFilter.WithDesigns when leaf.Mod.Designs.Count == 0:    return false;
+            case DesignFilter.WithoutDesigns when leaf.Mod.Designs.Count != 0: return false;
+        }
+
         if (_filter.Length == 0)
             return true;
 
