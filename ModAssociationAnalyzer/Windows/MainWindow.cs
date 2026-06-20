@@ -112,12 +112,11 @@ public sealed class MainWindow : Window, IDisposable
     private void DrawSplit()
     {
         var avail   = ImGui.GetContentRegionAvail();
-        var spacing = ImGui.GetStyle().ItemSpacing.X;
-        var handle  = 6f   * ImGuiHelpers.GlobalScale;
+        var handle  = 3f   * ImGuiHelpers.GlobalScale;
         var minPane = 150f * ImGuiHelpers.GlobalScale;
 
         // Keep both panes usable as the window (and the split) is resized.
-        var maxLeft = avail.X - handle - 2 * spacing - minPane;
+        var maxLeft = avail.X - handle - minPane;
         _leftWidth = Math.Clamp(_leftWidth, minPane, MathF.Max(minPane, maxLeft));
 
         using (var left = Child("##mods", new Vector2(_leftWidth, 0), true))
@@ -126,9 +125,10 @@ public sealed class MainWindow : Window, IDisposable
                 DrawModList();
         }
 
-        ImGui.SameLine();
+        // No item spacing around the divider so the gutter stays as thin as the handle itself.
+        ImGui.SameLine(0, 0);
         DrawSplitter(handle, avail.Y);
-        ImGui.SameLine();
+        ImGui.SameLine(0, 0);
 
         using (var right = Child("##designs", new Vector2(0, 0), true))
         {
