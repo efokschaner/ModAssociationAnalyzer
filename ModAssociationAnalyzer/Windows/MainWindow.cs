@@ -24,9 +24,10 @@ public sealed class MainWindow : Window, IDisposable
     private readonly PenumbraIpc         _penumbra;
     private readonly GlamourerIpc        _glamourer;
 
-    private string _filter           = string.Empty;
-    private bool   _onlyWithDesigns   = true;
+    private string  _filter          = string.Empty;
+    private bool    _onlyWithDesigns = true;
     private string? _selectedDir;
+    private float   _leftWidth       = 280f;
 
     public MainWindow(ModAssociationIndex index, PenumbraIpc penumbra, GlamourerIpc glamourer)
         : base("Mod Association Analyzer###ModAssociationAnalyzerMain")
@@ -86,14 +87,23 @@ public sealed class MainWindow : Window, IDisposable
 
     private void DrawSplit()
     {
-        var leftWidth = MathF.Max(200, ImGui.GetContentRegionAvail().X * 0.40f);
+        var avail   = ImGui.GetContentRegionAvail();
+        var spacing = ImGui.GetStyle().ItemSpacing.X;
+        var handle  = 6f   * ImGuiHelpers.GlobalScale;
+        var minPane = 150f * ImGuiHelpers.GlobalScale;
 
-        using (var left = Child("##mods", new Vector2(leftWidth, 0), true))
+        // Keep both panes usable as the window (and the split) is resized.
+        var maxLeft = avail.X - handle - 2 * spacing - minPane;
+        _leftWidth = Math.Clamp(_leftWidth, minPane, MathF.Max(minPane, maxLeft));
+
+        using (var left = Child("##mods", new Vector2(_leftWidth, 0), true))
         {
             if (left)
                 DrawModList();
         }
 
+        ImGui.SameLine();
+        DrawSplitter(handle, avail.Y);
         ImGui.SameLine();
 
         using (var right = Child("##designs", new Vector2(0, 0), true))
@@ -101,6 +111,21 @@ public sealed class MainWindow : Window, IDisposable
             if (right)
                 DrawDesignsForSelection();
         }
+    }
+
+    private void DrawSplitter(float width, float height)
+    {
+        // Transparent at rest; tints to the separator colors on hover/drag, like Penumbra's divider.
+        ImGui.PushStyleColor(ImGuiCol.Button,        0u);
+        ImGui.PushStyleColor(ImGuiCol.ButtonHovered, ImGui.GetColorU32(ImGuiCol.SeparatorHovered));
+        ImGui.PushStyleColor(ImGuiCol.ButtonActive,  ImGui.GetColorU32(ImGuiCol.SeparatorActive));
+        ImGui.Button("##splitter", new Vector2(width, height));
+        ImGui.PopStyleColor(3);
+
+        if (ImGui.IsItemHovered() || ImGui.IsItemActive())
+            ImGui.SetMouseCursor(ImGuiMouseCursor.ResizeEw);
+        if (ImGui.IsItemActive())
+            _leftWidth += ImGui.GetIO().MouseDelta.X;
     }
 
     private void DrawModList()
