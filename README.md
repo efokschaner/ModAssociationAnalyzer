@@ -30,6 +30,17 @@ folder tree (the filter input has a usage-filter dropdown on its right; filterin
 auto-expands matching folders; right-click for Expand / Collapse All) — with each mod showing
 its design-reference count and the name truncating before the count when space is tight.
 
+Next to the usage filter are two more controls:
+
+- **Sort** — *Name* or *Import date (newest first)*. In the tree this orders mods within each
+  folder (folders stay alphabetical). Import dates come from Penumbra's `GetModListAdapter` IPC
+  and are also shown in the detail pane.
+- **Flat list** — drops the folders and lists every mod together; hover a mod for its folder
+  path. Flat + import date + "Only mods used by no designs" lists recently imported mods that no
+  saved design uses yet.
+
+Not-installed mods have no import date and always sort last.
+
 > Note: Penumbra's own tree is built on the Luna `FileSystem<T>` / `FileSystemDrawer<T>`
 > framework (with ImSharp), which can't be lifted out standalone, so the tree here is a
 > minimal re-implementation over Dalamud's ImGui bindings fed by the IPC paths.

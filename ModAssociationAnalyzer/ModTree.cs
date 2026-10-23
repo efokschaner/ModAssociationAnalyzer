@@ -69,4 +69,27 @@ public static class ModTreeBuilder
 
         return root;
     }
+
+    /// <summary> Re-orders the mods within every folder of the tree in place. Folders stay alphabetical. </summary>
+    public static void SortMods(FolderNode folder, Comparison<ModLeaf> comparison)
+    {
+        folder.Mods.Sort(comparison);
+        foreach (var sub in folder.Folders.Values)
+            SortMods(sub, comparison);
+    }
+
+    /// <summary> Every mod leaf in the tree, ignoring folders. </summary>
+    public static List<ModLeaf> Flatten(FolderNode folder)
+    {
+        var leaves = new List<ModLeaf>();
+        Collect(folder);
+        return leaves;
+
+        void Collect(FolderNode node)
+        {
+            leaves.AddRange(node.Mods);
+            foreach (var sub in node.Folders.Values)
+                Collect(sub);
+        }
+    }
 }

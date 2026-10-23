@@ -33,10 +33,24 @@ public sealed class MainWindow : Window, IDisposable
         WithoutDesigns,
     }
 
+    private enum ModSort
+    {
+        Name,
+        ImportDateNewest,
+    }
+
     private string       _filter       = string.Empty;
     private DesignFilter _designFilter = DesignFilter.All;
+    private ModSort      _sort         = ModSort.Name;
+    private bool         _flat;
     private string?      _selectedDir;
     private float        _leftWidth    = 280f;
+
+    // The tree's mods are re-sorted in place (and the flat list rebuilt) only when the sort mode
+    // changes or a refresh produces a new tree, not every frame.
+    private FolderNode?   _orderedRoot;
+    private ModSort       _orderedBy;
+    private List<ModLeaf> _flatLeaves = [];
 
     // We own folder open/closed state (keyed by FolderNode.FullKey) rather than relying on
     // ImGui's internal tree storage, so Expand/Collapse All can act on the whole tree.
@@ -47,6 +61,12 @@ public sealed class MainWindow : Window, IDisposable
         DesignFilter.WithDesigns    => "Only mods used by a design",
         DesignFilter.WithoutDesigns => "Only mods used by no designs",
         _                           => "All mods",
+    };
+
+    private static string SortLabel(ModSort sort) => sort switch
+    {
+        ModSort.ImportDateNewest => "Import date (newest first)",
+        _                        => "Name",
     };
 
     public MainWindow(ModAssociationIndex index, PenumbraIpc penumbra, GlamourerIpc glamourer)
@@ -97,26 +117,35 @@ public sealed class MainWindow : Window, IDisposable
                 $"{_index.DesignCount} designs scanned, last refreshed {_index.LastRefresh:HH:mm:ss}.");
     }
 
-    // A full-width filter input with a small dropdown button on its right for the design-usage
-    // filter, mirroring the search bar Penumbra puts at the top of its mod tree.
+    // A full-width filter input with small buttons on its right for the design-usage filter, the
+    // sort mode and the flat-list toggle, mirroring the search bar Penumbra puts at the top of its
+    // mod tree. Buttons are highlighted while their setting is off its default.
     private void DrawFilterRow()
     {
         var style       = ImGui.GetStyle();
         var buttonWidth = ImGui.GetFrameHeight();
-        var inputWidth  = ImGui.GetContentRegionAvail().X - buttonWidth - style.ItemInnerSpacing.X;
+        var inputWidth  = ImGui.GetContentRegionAvail().X - 3 * (buttonWidth + style.ItemInnerSpacing.X);
 
         ImGui.SetNextItemWidth(inputWidth);
         ImGui.InputTextWithHint("##filter", "Filter mods...", ref _filter, 256);
 
         ImGui.SameLine(0, style.ItemInnerSpacing.X);
-        using (Plugin.PluginInterface.UiBuilder.IconFontHandle.Push())
-        {
-            if (ImGui.Button($"{FontAwesomeIcon.Filter.ToIconString()}##designFilter", new Vector2(buttonWidth)))
-                ImGui.OpenPopup("##designFilterPopup");
-        }
-
+        if (IconButton(FontAwesomeIcon.Filter, "##designFilter", buttonWidth, _designFilter != DesignFilter.All))
+            ImGui.OpenPopup("##designFilterPopup");
         if (ImGui.IsItemHovered())
             ImGui.SetTooltip($"Filter by design usage: {DesignFilterLabel(_designFilter)}");
+
+        ImGui.SameLine(0, style.ItemInnerSpacing.X);
+        if (IconButton(FontAwesomeIcon.SortAmountDown, "##sort", buttonWidth, _sort != ModSort.Name))
+            ImGui.OpenPopup("##sortPopup");
+        if (ImGui.IsItemHovered())
+            ImGui.SetTooltip($"Sort mods by: {SortLabel(_sort)}");
+
+        ImGui.SameLine(0, style.ItemInnerSpacing.X);
+        if (IconButton(FontAwesomeIcon.List, "##flat", buttonWidth, _flat))
+            _flat = !_flat;
+        if (ImGui.IsItemHovered())
+            ImGui.SetTooltip(_flat ? "Showing a flat list. Click to show folders." : "Showing folders. Click to show a flat list.");
 
         if (ImGui.BeginPopup("##designFilterPopup"))
         {
@@ -128,6 +157,31 @@ public sealed class MainWindow : Window, IDisposable
 
             ImGui.EndPopup();
         }
+
+        if (ImGui.BeginPopup("##sortPopup"))
+        {
+            foreach (var option in Enum.GetValues<ModSort>())
+            {
+                if (ImGui.RadioButton(SortLabel(option), option == _sort))
+                    _sort = option;
+            }
+
+            ImGui.EndPopup();
+        }
+    }
+
+    private static bool IconButton(FontAwesomeIcon icon, string id, float size, bool highlighted)
+    {
+        if (highlighted)
+            ImGui.PushStyleColor(ImGuiCol.Button, ImGui.GetColorU32(ImGuiCol.ButtonActive));
+
+        bool clicked;
+        using (Plugin.PluginInterface.UiBuilder.IconFontHandle.Push())
+            clicked = ImGui.Button($"{icon.ToIconString()}{id}", new Vector2(size));
+
+        if (highlighted)
+            ImGui.PopStyleColor();
+        return clicked;
     }
 
     private void DrawSplit()
@@ -185,8 +239,55 @@ public sealed class MainWindow : Window, IDisposable
 
     private void DrawModList()
     {
-        DrawFolder(_index.Root);
-        DrawTreeContextMenu();
+        EnsureOrdered();
+
+        if (_flat)
+        {
+            foreach (var leaf in _flatLeaves)
+            {
+                if (LeafVisible(leaf))
+                    DrawLeaf(leaf);
+            }
+        }
+        else
+        {
+            DrawFolder(_index.Root);
+            DrawTreeContextMenu();
+        }
+    }
+
+    private void EnsureOrdered()
+    {
+        if (ReferenceEquals(_orderedRoot, _index.Root) && _orderedBy == _sort)
+            return;
+
+        var sort = _sort;
+        Comparison<ModLeaf> comparison = (a, b) => CompareLeaves(a, b, sort);
+        ModTreeBuilder.SortMods(_index.Root, comparison);
+        _flatLeaves = ModTreeBuilder.Flatten(_index.Root);
+        _flatLeaves.Sort(comparison);
+
+        _orderedRoot = _index.Root;
+        _orderedBy   = sort;
+    }
+
+    private static int CompareLeaves(ModLeaf a, ModLeaf b, ModSort sort)
+    {
+        // Not-installed mods always go last (only matters in the flat list; in the tree they share a folder).
+        var c = a.Mod.Unknown.CompareTo(b.Mod.Unknown);
+        if (c != 0)
+            return c;
+
+        if (sort == ModSort.ImportDateNewest)
+        {
+            // Newest first; mods without a known date sink to the end.
+            c = (b.Mod.ImportDate ?? DateTimeOffset.MinValue).CompareTo(a.Mod.ImportDate ?? DateTimeOffset.MinValue);
+            if (c != 0)
+                return c;
+        }
+
+        c = StringComparer.OrdinalIgnoreCase.Compare(a.Mod.Name, b.Mod.Name);
+        return c != 0 ? c : StringComparer.OrdinalIgnoreCase.Compare(a.Mod.Directory, b.Mod.Directory);
     }
 
     private void DrawTreeContextMenu()
@@ -274,8 +375,12 @@ public sealed class MainWindow : Window, IDisposable
         ImGui.TreeNodeEx($"{shownName}###m:{leaf.Mod.Directory}", flags);
         if (ImGui.IsItemClicked())
             _selectedDir = leaf.Mod.Directory;
-        if (!ReferenceEquals(shownName, leaf.DisplayName) && ImGui.IsItemHovered())
-            ImGui.SetTooltip(leaf.DisplayName);
+        // In the flat list the folder isn't visible, so show the full path on hover instead.
+        var tooltip = _flat && !leaf.Mod.Unknown                  ? leaf.Mod.Path
+                    : !ReferenceEquals(shownName, leaf.DisplayName) ? leaf.DisplayName
+                    :                                                 null;
+        if (tooltip is not null && ImGui.IsItemHovered())
+            ImGui.SetTooltip(tooltip);
 
         // Status pip: red when not installed, yellow on a stale name/directory mismatch.
         if (pip is { } p)
@@ -368,6 +473,8 @@ public sealed class MainWindow : Window, IDisposable
         }
 
         ImGui.TextColored(Muted, mod.Directory);
+        if (mod.ImportDate is { } imported)
+            ImGui.TextColored(Muted, $"Imported {imported.LocalDateTime:yyyy-MM-dd HH:mm}");
         if (ImGui.Button("Open in Penumbra"))
             _penumbra.OpenMod(mod.Directory, mod.Name);
         ImGui.Separator();

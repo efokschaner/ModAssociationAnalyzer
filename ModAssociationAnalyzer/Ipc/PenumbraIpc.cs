@@ -10,15 +10,17 @@ namespace ModAssociationAnalyzer.Ipc;
 /// </summary>
 public sealed class PenumbraIpc
 {
-    private readonly GetModList     _getModList;
-    private readonly GetModPath     _getModPath;
-    private readonly OpenMainWindow _openMainWindow;
+    private readonly GetModList        _getModList;
+    private readonly GetModListAdapter _getModListAdapter;
+    private readonly GetModPath        _getModPath;
+    private readonly OpenMainWindow    _openMainWindow;
 
     public PenumbraIpc(IDalamudPluginInterface pi)
     {
-        _getModList     = new GetModList(pi);
-        _getModPath     = new GetModPath(pi);
-        _openMainWindow = new OpenMainWindow(pi);
+        _getModList        = new GetModList(pi);
+        _getModListAdapter = new GetModListAdapter(pi);
+        _getModPath        = new GetModPath(pi);
+        _openMainWindow    = new OpenMainWindow(pi);
     }
 
     /// <summary>
@@ -59,6 +61,30 @@ public sealed class PenumbraIpc
         {
             return name;
         }
+    }
+
+    /// <summary>
+    /// Maps mod directory name to the date the mod was imported into Penumbra. Read from the
+    /// type-erased mod list adapter, the only IPC that exposes import dates. Empty if unavailable.
+    /// </summary>
+    public IReadOnlyDictionary<string, DateTimeOffset> GetImportDates()
+    {
+        var dates = new Dictionary<string, DateTimeOffset>(StringComparer.OrdinalIgnoreCase);
+        try
+        {
+            using var list = _getModListAdapter.Invoke();
+            foreach (var mod in list)
+            {
+                using (mod)
+                    dates[mod.Identifier] = mod.ImportDate;
+            }
+        }
+        catch
+        {
+            // Penumbra unavailable (or an older version without the adapter); sort falls back to unknown dates.
+        }
+
+        return dates;
     }
 
     /// <summary> Open Penumbra's main window focused on the given mod. </summary>

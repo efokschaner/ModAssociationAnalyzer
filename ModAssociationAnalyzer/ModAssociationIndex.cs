@@ -28,6 +28,9 @@ public sealed record ModEntry(string Directory, string Name, List<AssociatedDesi
     /// <summary> Full path in Penumbra's mod folder tree (e.g. "Outfits/Cool Mod"); empty/unknown otherwise. </summary>
     public string Path { get; init; } = string.Empty;
 
+    /// <summary> When the mod was imported into Penumbra; null for not-installed mods or if Penumbra didn't report it. </summary>
+    public DateTimeOffset? ImportDate { get; init; }
+
     /// <summary> True when at least one referencing design stored a different name or directory than this mod has now. </summary>
     public bool HasMismatch { get; set; }
 }
@@ -54,10 +57,15 @@ public sealed class ModAssociationIndex(PenumbraIpc penumbra, GlamourerIpc glamo
             // ModMatches): match on directory first, then on name. Names are not unique, so the first
             // installed mod with a given name wins the fallback.
             var byDir  = new Dictionary<string, ModEntry>(StringComparer.OrdinalIgnoreCase);
-            var byName = new Dictionary<string, ModEntry>(StringComparer.OrdinalIgnoreCase);
+            var byName      = new Dictionary<string, ModEntry>(StringComparer.OrdinalIgnoreCase);
+            var importDates = penumbra.GetImportDates();
             foreach (var (dir, name) in penumbra.GetMods())
             {
-                var mod = new ModEntry(dir, name, []) { Path = penumbra.GetModFullPath(dir, name) };
+                var mod = new ModEntry(dir, name, [])
+                {
+                    Path       = penumbra.GetModFullPath(dir, name),
+                    ImportDate = importDates.TryGetValue(dir, out var date) ? date : null,
+                };
                 byDir[dir] = mod;
                 byName.TryAdd(name, mod);
             }
